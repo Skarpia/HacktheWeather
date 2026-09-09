@@ -1,0 +1,2 @@
+# HacktheWeather
+JHUB AFRICA Hackathon
