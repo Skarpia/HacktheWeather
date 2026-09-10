@@ -69,6 +69,10 @@ The dataset was inspected before any variable was assumed (`analysis/exploratory
 
 **No soil moisture sensor exists at this station.** The risk engine does not fabricate it — it only uses variables that are actually present in a given observation, and re-normalizes its weights across whatever is available (see §11).
 
+### 6a. Adding more historical data
+
+Drop additional Conduit exports straight into `data/` — either `.csv` or `.xlsx`, same raw column layout as the original (`ts`, `rg1`, `rg2`, `temp_bmx`, ...). Every matching file in that folder is picked up automatically (`services/data_processor.load_historical_dataset`), concatenated, de-duplicated by timestamp, and combined into one baseline — no code changes needed. This is useful for extending coverage to a different season or a longer time window before your next demo.
+
 **Key finding:** rainfall at this station is heavily **zero-inflated** — only ~1.9% of 15-minute intervals in the historical window show any rain at all. This is why anomaly detection uses **percentile rank** for rainfall variables instead of a z-score (a z-score is unstable when the mean is near-zero and the distribution is a spike-at-zero).
 
 ## 7. Conduit API integration
@@ -211,7 +215,9 @@ python analysis/exploratory_analysis.py
 
 ## 20. Mock mode
 
-With `MOCK_MODE=true` (default), the dashboard generates synthetic-but-realistic observations spanning LOW/MODERATE/HIGH/CRITICAL, clearly labeled **"DEMO DATA — NOT LIVE CONDUIT OBSERVATIONS"** in the UI. The sidebar lets you force a specific scenario for a live demo (e.g. force CRITICAL to show the alert flow) without needing real rain to fall. Set `MOCK_MODE=false` once the live Conduit endpoint is confirmed.
+With `MOCK_MODE=true` (default), the dashboard generates synthetic observations spanning LOW/MODERATE/HIGH/CRITICAL, clearly labeled **"DEMO DATA — NOT LIVE CONDUIT OBSERVATIONS"** in the UI. The sidebar lets you force a specific scenario for a live demo (e.g. force CRITICAL to show the alert flow) without needing real rain to fall. Set `MOCK_MODE=false` once the live Conduit endpoint is confirmed.
+
+**Mock generation is self-calibrating**, not hand-tuned fixed values. Early versions used fixed mm values (e.g. "moderate = 1mm rainfall"), which broke badly on this dataset: the JKUAT baseline is so dry (p99 for 15-min rainfall is ~0.2mm) that even a "moderate" 1mm reading saturated the rainfall-intensity sub-score and pushed every forced scenario toward CRITICAL. The generator now binary-searches a severity parameter against the real risk engine and the real baseline until the resulting **farm-specific** score lands in the middle of the requested band — accounting for the current farm's terrain multiplier too, so "force HIGH" always displays as HIGH regardless of whether the selected farm is low-lying or sloped. This also means mock calibration re-adjusts itself automatically if you add more historical datasets that shift the baseline (see §6a).
 
 ## 21. Limitations
 

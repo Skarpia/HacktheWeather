@@ -56,10 +56,54 @@ VALID_RANGES = {
 
 
 def load_historical_csv(path: str) -> pd.DataFrame:
-    """Load the raw historical Conduit CSV without assuming column names
-    beyond what's actually present."""
+    """Load a single raw historical Conduit CSV without assuming column
+    names beyond what's actually present."""
     df = pd.read_csv(path)
     return normalize_observations(df)
+
+
+def load_historical_dataset(data_dir) -> pd.DataFrame:
+    """Load and combine ALL historical Conduit exports found in
+    `data_dir` -- both .csv and .xlsx files -- into a single normalized,
+    de-duplicated, time-sorted dataframe.
+
+    This lets you drop additional Conduit exports (e.g. for a second
+    time period, or a longer season) straight into the data/ folder
+    without touching any code: every matching file is picked up
+    automatically and merged into one combined baseline.
+
+    Files are expected to share the same raw Conduit column layout as
+    the original export (ts, rg1, rg2, ... etc). Rows with duplicate
+    timestamps (e.g. overlapping exports) are de-duplicated, keeping
+    the first occurrence.
+    """
+    from pathlib import Path as _Path
+
+    data_dir = _Path(data_dir)
+    frames = []
+
+    for csv_path in sorted(data_dir.glob("*.csv")):
+        try:
+            frames.append(pd.read_csv(csv_path))
+        except Exception as e:
+            print(f"[data_processor] Skipping {csv_path.name}: {e}")
+
+    for xlsx_path in sorted(data_dir.glob("*.xlsx")):
+        try:
+            frames.append(pd.read_excel(xlsx_path))
+        except Exception as e:
+            print(f"[data_processor] Skipping {xlsx_path.name}: {e}")
+
+    if not frames:
+        raise FileNotFoundError(f"No .csv or .xlsx Conduit data files found in {data_dir}")
+
+    combined_raw = pd.concat(frames, ignore_index=True, sort=False)
+    df = normalize_observations(combined_raw)
+
+    if "timestamp" in df.columns:
+        df = df.drop_duplicates(subset="timestamp", keep="first").sort_values("timestamp").reset_index(drop=True)
+
+    return df
 
 
 def normalize_observations(df: pd.DataFrame) -> pd.DataFrame:

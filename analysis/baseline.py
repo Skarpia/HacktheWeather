@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from services.data_processor import load_historical_csv, available_canonical_columns
+from services.data_processor import load_historical_dataset, available_canonical_columns
 import config
 
 
@@ -75,7 +75,7 @@ def build_baseline(df: Optional[pd.DataFrame] = None) -> Baseline:
     dataset -- nothing is assumed or fabricated.
     """
     if df is None:
-        df = load_historical_csv(str(config.HISTORICAL_DATA_PATH))
+        df = load_historical_dataset(config.DATA_DIR)
 
     variables = {}
     for col in available_canonical_columns(df):

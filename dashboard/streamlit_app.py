@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 import config
-from services.data_processor import load_historical_csv, latest_observation
+from services.data_processor import load_historical_dataset, latest_observation
 from analysis.baseline import build_baseline
 from services.conduit_api import get_current_observation, _mock_observation
 from services.risk_engine import assess_risk
@@ -29,12 +29,147 @@ from services.alerts import build_alert, format_alert_text
 # ----------------------------------------------------------------------
 st.set_page_config(page_title="FlowSafe", page_icon="🌊", layout="wide")
 
-RISK_COLORS = {"LOW": "#2ecc71", "MODERATE": "#f1c40f", "HIGH": "#e67e22", "CRITICAL": "#e74c3c"}
+RISK_COLORS = {"LOW": "#22c55e", "MODERATE": "#f0b429", "HIGH": "#f0723c", "CRITICAL": "#e5484d"}
+RISK_BG = {"LOW": "#eafaf1", "MODERATE": "#fef9e7", "HIGH": "#fdebd0", "CRITICAL": "#fdecea"}
+RISK_ICON = {"LOW": "✅", "MODERATE": "🌦️", "HIGH": "⚠️", "CRITICAL": "🚨"}
+
+# ----------------------------------------------------------------------
+# Theme: fonts, gradients, cards, hero banner -- self-contained CSS
+# (no external images, so the demo never depends on network access).
+# A faint inline-SVG raindrop pattern gives the hero a "weather" feel;
+# soft greens throughout nod to the agricultural context.
+# ----------------------------------------------------------------------
+RAIN_PATTERN_SVG = (
+    "data:image/svg+xml;utf8,"
+    "<svg xmlns='http://www.w3.org/2000/svg' width='60' height='60'>"
+    "<g fill='%23ffffff' fill-opacity='0.10'>"
+    "<path d='M8 4c3 5 3 9 0 12-3-3-3-7 0-12z'/>"
+    "<path d='M38 24c3 5 3 9 0 12-3-3-3-7 0-12z'/>"
+    "<path d='M20 44c3 5 3 9 0 12-3-3-3-7 0-12z'/>"
+    "</g></svg>"
+)
+
+st.markdown(f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700;800&display=swap');
+
+html, body, [class*="css"] {{
+    font-family: 'Inter', sans-serif;
+}}
+
+.stApp {{
+    background: linear-gradient(180deg, #f4faff 0%, #eef7f0 45%, #f7fbf7 100%);
+}}
+
+section[data-testid="stSidebar"] {{
+    background: linear-gradient(180deg, #f0f7ee 0%, #e7f3e8 100%);
+    border-right: 1px solid #d9ead9;
+}}
+section[data-testid="stSidebar"] h1 {{
+    font-family: 'Poppins', sans-serif;
+    font-size: 1.25rem;
+    color: #1f6b3a;
+}}
+
+/* Hero banner */
+.flowsafe-hero {{
+    background: linear-gradient(120deg, #1f6bd8 0%, #2f9bd6 55%, #2fb6a3 100%);
+    background-image:
+        linear-gradient(120deg, rgba(31,107,216,0.94) 0%, rgba(47,155,214,0.94) 55%, rgba(47,182,163,0.94) 100%),
+        url("{RAIN_PATTERN_SVG}");
+    border-radius: 20px;
+    padding: 2rem 2.2rem;
+    margin-bottom: 1.4rem;
+    box-shadow: 0 10px 30px rgba(31,107,216,0.18);
+}}
+.flowsafe-hero h1 {{
+    font-family: 'Poppins', sans-serif;
+    font-weight: 800;
+    color: white;
+    font-size: 2.1rem;
+    margin: 0 0 0.2rem 0;
+    letter-spacing: 0.5px;
+}}
+.flowsafe-hero p.tagline {{
+    color: rgba(255,255,255,0.92);
+    font-size: 1.02rem;
+    margin: 0 0 0.9rem 0;
+    font-style: italic;
+}}
+.flowsafe-pill {{
+    display: inline-block;
+    background: rgba(255,255,255,0.18);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 999px;
+    padding: 0.3rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-right: 0.5rem;
+    backdrop-filter: blur(2px);
+}}
+
+/* Risk badge */
+.flowsafe-risk-badge {{
+    text-align: center;
+    border-radius: 16px;
+    padding: 0.9rem 0.5rem;
+    font-family: 'Poppins', sans-serif;
+    font-weight: 800;
+    font-size: 1.6rem;
+    letter-spacing: 1px;
+    margin-top: 0.6rem;
+}}
+
+/* Section headers */
+.flowsafe-section-title {{
+    font-family: 'Poppins', sans-serif;
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: #14532d;
+    margin: 0 0 0.6rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}}
+
+/* Card containers (targets Streamlit's bordered container) */
+div[data-testid="stVerticalBlockBorderWrapper"] {{
+    border-radius: 16px !important;
+    box-shadow: 0 2px 14px rgba(20, 83, 45, 0.06);
+    background: #ffffff;
+}}
+
+/* Metrics */
+div[data-testid="stMetric"] {{
+    background: #f4fbf5;
+    border: 1px solid #dcf0de;
+    border-radius: 12px;
+    padding: 0.6rem 0.8rem 0.3rem 0.8rem;
+}}
+div[data-testid="stMetricLabel"] {{
+    color: #3a7a4e;
+    font-weight: 600;
+}}
+
+/* Buttons */
+.stButton>button {{
+    border-radius: 10px;
+    font-weight: 600;
+    border: 1px solid #2fb6a3;
+    color: #14532d;
+}}
+.stButton>button:hover {{
+    background: #e6f7f1;
+    border-color: #1f6b3a;
+}}
+</style>
+""", unsafe_allow_html=True)
 
 
 @st.cache_data
 def _load_history():
-    return load_historical_csv(str(config.HISTORICAL_DATA_PATH))
+    return load_historical_dataset(config.DATA_DIR)
 
 
 @st.cache_data
@@ -80,18 +215,29 @@ refresh = st.sidebar.button("🔄 Refresh live reading")
 # ----------------------------------------------------------------------
 # Get current observation (mock or live)
 # ----------------------------------------------------------------------
+# Computed up-front so mock generation can calibrate to the FARM-
+# SPECIFIC score (i.e. the number actually shown on screen), not just
+# the raw environmental score -- otherwise a vulnerable farm's terrain
+# multiplier can push a "forced HIGH" scenario into a CRITICAL display.
+mult = farm_vulnerability_multiplier(farm_profile)
+
 if demo_mode:
     level_hint = None if forced_level == "Auto / Random" else forced_level
-    result = _mock_observation(level_hint)
+    result = _mock_observation(level_hint, baseline=baseline, farm_multiplier=mult)
 else:
-    result = get_current_observation()
+    result = get_current_observation(baseline=baseline)
 
 # ----------------------------------------------------------------------
-# Header
+# Header (hero banner)
 # ----------------------------------------------------------------------
-st.title("🌊 FLOWSAFE")
-st.caption("Hyperlocal Flash-Flood Early Warning — *From weather data to farm-saving decisions.*")
-st.markdown(f"**Location:** JKUAT • JUJA • KIAMBU &nbsp;&nbsp;|&nbsp;&nbsp; {config.COVERAGE_LABEL}")
+st.markdown(f"""
+<div class="flowsafe-hero">
+    <h1>🌊 FLOWSAFE</h1>
+    <p class="tagline">Hyperlocal Flash-Flood Early Warning — From weather data to farm-saving decisions.</p>
+    <span class="flowsafe-pill">📍 JKUAT • JUJA • KIAMBU</span>
+    <span class="flowsafe-pill">🌾 {config.COVERAGE_LABEL}</span>
+</div>
+""", unsafe_allow_html=True)
 
 if result.get("is_mock"):
     st.warning("⚠️ **DEMO DATA — NOT LIVE CONDUIT OBSERVATIONS**")
@@ -113,102 +259,118 @@ else:
 # ----------------------------------------------------------------------
 # Risk assessment
 # ----------------------------------------------------------------------
-mult = farm_vulnerability_multiplier(farm_profile)
 risk = assess_risk(observation, baseline, history_df=trend_df, farm_vulnerability_multiplier=mult)
 recommendations = generate_recommendations(risk["risk_level"], farm_profile)
 
 # ----------------------------------------------------------------------
 # Main risk display
 # ----------------------------------------------------------------------
+color = RISK_COLORS.get(risk["risk_level"], "#7f8c8d")
+bg = RISK_BG.get(risk["risk_level"], "#f2f2f2")
+icon = RISK_ICON.get(risk["risk_level"], "ℹ️")
+
 col1, col2 = st.columns([1, 2])
 
 with col1:
-    color = RISK_COLORS.get(risk["risk_level"], "#7f8c8d")
-    fig = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=risk["risk_score"],
-        number={"suffix": " / 100"},
-        title={"text": "FLASH-FLOOD RISK"},
-        gauge={
-            "axis": {"range": [0, 100]},
-            "bar": {"color": color},
-            "steps": [
-                {"range": [0, 30], "color": "#eafaf1"},
-                {"range": [30, 60], "color": "#fef9e7"},
-                {"range": [60, 80], "color": "#fdebd0"},
-                {"range": [80, 100], "color": "#fadbd8"},
-            ],
-        },
-    ))
-    fig.update_layout(height=280, margin=dict(l=20, r=20, t=50, b=10))
-    st.plotly_chart(fig, use_container_width=True)
-    st.markdown(
-        f"<h2 style='text-align:center;color:{color};'>{risk['risk_level']}</h2>",
-        unsafe_allow_html=True,
-    )
+    with st.container(border=True):
+        fig = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=risk["risk_score"],
+            number={"suffix": " / 100"},
+            title={"text": "FLASH-FLOOD RISK"},
+            gauge={
+                "axis": {"range": [0, 100]},
+                "bar": {"color": color},
+                "bgcolor": "white",
+                "steps": [
+                    {"range": [0, 30], "color": RISK_BG["LOW"]},
+                    {"range": [30, 60], "color": RISK_BG["MODERATE"]},
+                    {"range": [60, 80], "color": RISK_BG["HIGH"]},
+                    {"range": [80, 100], "color": RISK_BG["CRITICAL"]},
+                ],
+            },
+        ))
+        fig.update_layout(height=260, margin=dict(l=20, r=20, t=50, b=10), paper_bgcolor="rgba(0,0,0,0)")
+        st.plotly_chart(fig, use_container_width=True)
+        st.markdown(
+            f"<div class='flowsafe-risk-badge' style='background:{bg};color:{color};'>{icon} {risk['risk_level']}</div>",
+            unsafe_allow_html=True,
+        )
 
 with col2:
-    st.subheader("Current Environmental Observations")
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Rainfall", f"{observation.get('rainfall_mm', 'N/A')} mm/15min")
-    m2.metric("Humidity", f"{observation.get('humidity_pct', 'N/A')}%")
-    m3.metric("Pressure", f"{observation.get('pressure_hpa', 'N/A')} hPa")
-    m4.metric("Temperature", f"{observation.get('temperature_c', 'N/A')} °C")
+    with st.container(border=True):
+        st.markdown("<div class='flowsafe-section-title'>🌦️ Current Environmental Observations</div>", unsafe_allow_html=True)
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("💧 Rainfall", f"{observation.get('rainfall_mm', 'N/A')} mm/15min")
+        m2.metric("💦 Humidity", f"{observation.get('humidity_pct', 'N/A')}%")
+        m3.metric("🌡️ Pressure", f"{observation.get('pressure_hpa', 'N/A')} hPa")
+        m4.metric("🌤️ Temperature", f"{observation.get('temperature_c', 'N/A')} °C")
 
-    dq = risk["data_quality"]["completeness_pct"]
-    st.markdown("**DATA QUALITY** (completeness of this reading, *not* flood probability)")
-    st.progress(min(int(dq), 100) / 100, text=f"{dq}%")
+        dq = risk["data_quality"]["completeness_pct"]
+        st.markdown("**DATA QUALITY** (completeness of this reading, *not* flood probability)")
+        st.progress(min(int(dq), 100) / 100, text=f"{dq}%")
 
-st.markdown("---")
+st.write("")
 
 # ----------------------------------------------------------------------
 # Why are we alerting you?
 # ----------------------------------------------------------------------
-st.subheader("🧭 WHY ARE WE ALERTING YOU?")
-for factor in risk["risk_factors"]:
-    st.markdown(f"- {factor}")
+with st.container(border=True):
+    st.markdown("<div class='flowsafe-section-title'>🧭 WHY ARE WE ALERTING YOU?</div>", unsafe_allow_html=True)
+    for factor in risk["risk_factors"]:
+        st.markdown(f"- {factor}")
 
-st.markdown("---")
+st.write("")
 
 # ----------------------------------------------------------------------
 # Action center
 # ----------------------------------------------------------------------
-st.subheader("✅ WHAT SHOULD YOU DO NOW?")
-for i, action in enumerate(recommendations, 1):
-    st.markdown(f"**{i}.** {action}")
+with st.container(border=True):
+    st.markdown("<div class='flowsafe-section-title'>✅ WHAT SHOULD YOU DO NOW?</div>", unsafe_allow_html=True)
+    for i, action in enumerate(recommendations, 1):
+        st.markdown(f"**{i}.** {action}")
 
-if risk["risk_level"] in ("HIGH", "CRITICAL"):
-    alert = build_alert(farm_location, risk, recommendations, is_mock_data=is_mock)
-    if alert:
-        st.markdown("---")
-        st.error(f"🚨 **ALERT TRIGGERED**\n\n{format_alert_text(alert)}")
+    if risk["risk_level"] in ("HIGH", "CRITICAL"):
+        alert = build_alert(farm_location, risk, recommendations, is_mock_data=is_mock)
+        if alert:
+            st.markdown("---")
+            st.error(f"🚨 **ALERT TRIGGERED**\n\n{format_alert_text(alert)}")
 
-st.markdown("---")
+st.write("")
 
 # ----------------------------------------------------------------------
 # Current vs baseline
 # ----------------------------------------------------------------------
-st.subheader("📊 CURRENT CONDITIONS vs JKUAT BASELINE (6–24 March 2026)")
-compare_vars = [v for v in ["rainfall_mm", "humidity_pct", "pressure_hpa", "temperature_c"] if v in observation]
-comp_col1, comp_col2 = st.columns(2)
-for i, var in enumerate(compare_vars):
-    vb = baseline.get(var)
-    if vb is None:
-        continue
-    current_val = observation.get(var)
-    fig2 = go.Figure()
-    fig2.add_trace(go.Bar(x=["Baseline mean", "Baseline p95", "Current"],
-                           y=[vb.mean, vb.p95, current_val],
-                           marker_color=["#95a5a6", "#f39c12", color]))
-    fig2.update_layout(title=var.replace("_", " ").title(), height=250, margin=dict(l=10, r=10, t=40, b=10))
-    (comp_col1 if i % 2 == 0 else comp_col2).plotly_chart(fig2, use_container_width=True)
+with st.container(border=True):
+    st.markdown(
+        f"<div class='flowsafe-section-title'>📊 CURRENT CONDITIONS vs JKUAT BASELINE ({baseline.period_start[:10]} to {baseline.period_end[:10]})</div>",
+        unsafe_allow_html=True,
+    )
+    compare_vars = [v for v in ["rainfall_mm", "humidity_pct", "pressure_hpa", "temperature_c"] if v in observation]
+    comp_col1, comp_col2 = st.columns(2)
+    for i, var in enumerate(compare_vars):
+        vb = baseline.get(var)
+        if vb is None:
+            continue
+        current_val = observation.get(var)
+        fig2 = go.Figure()
+        fig2.add_trace(go.Bar(x=["Baseline mean", "Baseline p95", "Current"],
+                               y=[vb.mean, vb.p95, current_val],
+                               marker_color=["#9fd3a8", "#f0b429", color]))
+        fig2.update_layout(title=var.replace("_", " ").title(), height=250,
+                            margin=dict(l=10, r=10, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)",
+                            plot_bgcolor="rgba(0,0,0,0)")
+        (comp_col1 if i % 2 == 0 else comp_col2).plotly_chart(fig2, use_container_width=True)
 
-st.markdown("---")
+st.write("")
 
 # ----------------------------------------------------------------------
 # Historical trends
 # ----------------------------------------------------------------------
-st.subheader("📈 HISTORICAL RAINFALL & CONDITIONS (6–24 March 2026)")
+st.markdown(
+    f"<div class='flowsafe-section-title'>📈 HISTORICAL RAINFALL & CONDITIONS ({baseline.period_start[:10]} to {baseline.period_end[:10]})</div>",
+    unsafe_allow_html=True,
+)
 tab1, tab2, tab3 = st.tabs(["Rainfall trend", "Humidity & Pressure", "Risk timeline (simulated)"])
 
 with tab1:

@@ -13,13 +13,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
-from services.data_processor import load_historical_csv, available_canonical_columns
+from services.data_processor import load_historical_dataset, available_canonical_columns
 from analysis.baseline import build_baseline
 
 
 def main():
     import config
-    df = load_historical_csv(str(config.HISTORICAL_DATA_PATH))
+    df = load_historical_dataset(config.DATA_DIR)
 
     print("=" * 70)
     print("FLOWSAFE — JKUAT Conduit Historical Data Inspection")
